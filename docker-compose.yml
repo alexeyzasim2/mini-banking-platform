@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: banking_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Kd8mPq2Ln5Rv9Xt3Yw7Bz}
+      POSTGRES_DB: ${POSTGRES_DB:-banking_platform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres_test:
+    image: postgres:15-alpine
+    container_name: banking_postgres_test
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Kd8mPq2Ln5Rv9Xt3Yw7Bz}
+      POSTGRES_DB: banking_platform_test
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: banking_backend
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-Kd8mPq2Ln5Rv9Xt3Yw7Bz}
+      DB_NAME: ${POSTGRES_DB:-banking_platform}
+      DB_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:-Wn9Kp2Mq5Lt8Hs1Fv4Dx7Jz0Gc3Rb6Ye9Tw2Un5Xk8Aq1Cs4Pv7No0Ir3Eu6Bm9Zl}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-168}
+      SERVER_PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: banking_frontend
+    ports:
+      - "3000:80"
+    environment:
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8080/api/v1}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  postgres_test_data:
+

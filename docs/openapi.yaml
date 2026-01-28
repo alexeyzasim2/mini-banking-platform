@@ -1,0 +1,542 @@
+openapi: 3.0.3
+info:
+  title: Mini Banking Platform API
+  description: RESTful API for a simplified banking platform with double-entry ledger system
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Authentication
+    description: User authentication and registration
+  - name: Accounts
+    description: Account management operations
+  - name: Transactions
+    description: Financial transaction operations
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Account:
+      type: object
+      description: User currency wallet with balance stored in integer cents
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+          enum: [USD, EUR]
+        balance_cents:
+          type: integer
+          format: int64
+          description: Current balance in cents (e.g. 1000 = $10.00)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Transaction:
+      type: object
+      description: Financial transaction record
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [initial_deposit, transfer, exchange]
+        from_user_id:
+          type: string
+          format: uuid
+        to_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        currency:
+          type: string
+          enum: [USD, EUR]
+        amount_cents:
+          type: integer
+          format: int64
+          description: Transaction amount in cents
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        password:
+          type: string
+          format: password
+          example: password123
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - first_name
+        - last_name
+      properties:
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: password123
+        first_name:
+          type: string
+          example: John
+        last_name:
+          type: string
+          example: Doe
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: '#/components/schemas/User'
+
+    TransferRequest:
+      type: object
+      required:
+        - to_user_id
+        - currency
+        - amount_cents
+      properties:
+        to_user_id:
+          type: string
+          example: alice@example.com
+          description: Recipient identifier (email or user ID)
+        currency:
+          type: string
+          enum: [USD, EUR]
+          example: USD
+        amount_cents:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Amount to transfer in cents (e.g. 1000 = $10.00)
+          example: 10000
+
+    ExchangeRequest:
+      type: object
+      required:
+        - from_currency
+        - amount_cents
+      properties:
+        from_currency:
+          type: string
+          enum: [USD, EUR]
+          example: USD
+        amount_cents:
+          type: integer
+          format: int64
+          minimum: 10
+          description: Amount to exchange in cents (minimum 10 cents)
+          example: 5000
+
+    AccountsResponse:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Account'
+
+    TransactionsResponse:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+
+    ReconciliationResult:
+      type: object
+      description: Result of comparing account balance with ledger sum
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+          enum: [USD, EUR]
+        balance_cents:
+          type: integer
+          format: int64
+          description: Current balance from accounts table
+        ledger_sum_cents:
+          type: integer
+          format: int64
+          description: Sum of ledger_entries.amount_cents for this account
+        difference_cents:
+          type: integer
+          format: int64
+          description: balance_cents - ledger_sum_cents
+        is_balanced:
+          type: boolean
+          description: True if difference_cents is zero
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid credentials
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the API is running
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/auth/login:
+    post:
+      summary: User login
+      description: Authenticate user and receive JWT token
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/register:
+    post:
+      summary: User registration
+      description: Create a new user account with USD and EUR accounts
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request or user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/me:
+    get:
+      summary: Get current user
+      description: Get authenticated user information
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/accounts:
+    get:
+      summary: Get user accounts
+      description: Get all accounts for the authenticated user
+      tags:
+        - Accounts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/accounts/{id}/balance:
+    get:
+      summary: Get account balance
+      description: Get balance for a specific account
+      tags:
+        - Accounts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Account ID
+      responses:
+        '200':
+          description: Account balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currency:
+                    type: string
+                    enum: [USD, EUR]
+                  balance_cents:
+                    type: integer
+                    format: int64
+                    description: Current balance in cents for this account
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/accounts/reconcile:
+    get:
+      summary: Reconcile account balances
+      description: Verify that account balances match the sum of ledger entries (audit/reconciliation endpoint)
+      tags:
+        - Accounts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Reconciliation results for all user accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReconciliationResult'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/transactions/transfer:
+    post:
+      summary: Transfer money
+      description: Transfer money to another user
+      tags:
+        - Transactions
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '201':
+          description: Transfer successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/transactions/exchange:
+    post:
+      summary: Exchange currency
+      description: Exchange currency between USD and EUR
+      tags:
+        - Transactions
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRequest'
+      responses:
+        '201':
+          description: Exchange successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Invalid request or insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/transactions:
+    get:
+      summary: Get transaction history
+      description: Get paginated transaction history with optional filtering
+      tags:
+        - Transactions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [transfer, exchange]
+          description: Filter by transaction type
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Items per page
+      responses:
+        '200':
+          description: Transaction history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
