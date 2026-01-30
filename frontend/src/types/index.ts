@@ -16,7 +16,7 @@ export interface Account {
 
 export interface Transaction {
   id: string;
-  type: 'transfer' | 'exchange';
+  type: 'transfer' | 'exchange' | 'initial_deposit';
   from_user_id: string;
   to_user_id?: string;
   amount_cents: number;

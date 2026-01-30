@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Mini Banking Platform API
-  description: RESTful API for a simplified banking platform with double-entry ledger system
+  description: RESTful API for a simplified banking platform with double-entry ledger system (balanced per currency using FX system accounts for exchanges)
   version: 1.0.0
   contact:
     name: API Support
@@ -63,6 +63,9 @@ components:
           type: integer
           format: int64
           description: Current balance in cents (e.g. 1000 = $10.00)
+        allow_negative:
+          type: boolean
+          description: Internal flag for system accounts that may carry negative balances
         created_at:
           type: string
           format: date-time
@@ -146,7 +149,7 @@ components:
           type: string
           example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         user:
-          $ref: '#/components/schemas/User'
+          $ref: "#/components/schemas/User"
 
     TransferRequest:
       type: object
@@ -193,7 +196,7 @@ components:
         accounts:
           type: array
           items:
-            $ref: '#/components/schemas/Account'
+            $ref: "#/components/schemas/Account"
 
     TransactionsResponse:
       type: object
@@ -201,7 +204,7 @@ components:
         transactions:
           type: array
           items:
-            $ref: '#/components/schemas/Transaction'
+            $ref: "#/components/schemas/Transaction"
         page:
           type: integer
         limit:
@@ -250,7 +253,7 @@ paths:
       tags:
         - System
       responses:
-        '200':
+        "200":
           description: Service is healthy
           content:
             application/json:
@@ -272,20 +275,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: "#/components/schemas/LoginRequest"
       responses:
-        '200':
+        "200":
           description: Login successful
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
           description: Invalid credentials
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/auth/register:
     post:
@@ -298,20 +301,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterRequest'
+              $ref: "#/components/schemas/RegisterRequest"
       responses:
-        '201':
+        "201":
           description: Registration successful
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
           description: Invalid request or user already exists
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/auth/me:
     get:
@@ -322,18 +325,18 @@ paths:
       security:
         - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: User information
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '401':
+                $ref: "#/components/schemas/User"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/accounts:
     get:
@@ -344,18 +347,18 @@ paths:
       security:
         - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: List of accounts
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccountsResponse'
-        '401':
+                $ref: "#/components/schemas/AccountsResponse"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/accounts/{id}/balance:
     get:
@@ -374,7 +377,7 @@ paths:
             format: uuid
           description: Account ID
       responses:
-        '200':
+        "200":
           description: Account balance
           content:
             application/json:
@@ -388,18 +391,18 @@ paths:
                     type: integer
                     format: int64
                     description: Current balance in cents for this account
-        '401':
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
           description: Account not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/accounts/reconcile:
     get:
@@ -410,20 +413,20 @@ paths:
       security:
         - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Reconciliation results for all user accounts
           content:
             application/json:
               schema:
-                    type: array
-                    items:
-                  $ref: '#/components/schemas/ReconciliationResult'
-        '401':
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReconciliationResult"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/transactions/transfer:
     post:
@@ -438,31 +441,31 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TransferRequest'
+              $ref: "#/components/schemas/TransferRequest"
       responses:
-        '201':
+        "201":
           description: Transfer successful
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Transaction'
-        '400':
+                $ref: "#/components/schemas/Transaction"
+        "400":
           description: Invalid request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/transactions/exchange:
     post:
       summary: Exchange currency
-      description: Exchange currency between USD and EUR
+      description: Exchange currency between USD and EUR; recorded as balanced double-entry per currency using FX system accounts
       tags:
         - Transactions
       security:
@@ -472,31 +475,31 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ExchangeRequest'
+              $ref: "#/components/schemas/ExchangeRequest"
       responses:
-        '201':
+        "201":
           description: Exchange successful
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Transaction'
-        '400':
+                $ref: "#/components/schemas/Transaction"
+        "400":
           description: Invalid request or insufficient funds
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/transactions:
     get:
       summary: Get transaction history
-      description: Get paginated transaction history with optional filtering
+      description: Get paginated transaction history with optional filtering. Includes `initial_deposit` entries by default.
       tags:
         - Transactions
       security:
@@ -507,7 +510,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [transfer, exchange]
+            enum: [transfer, exchange, initial_deposit]
           description: Filter by transaction type
         - name: page
           in: query
@@ -527,16 +530,15 @@ paths:
             default: 10
           description: Items per page
       responses:
-        '200':
+        "200":
           description: Transaction history
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TransactionsResponse'
-        '401':
+                $ref: "#/components/schemas/TransactionsResponse"
+        "401":
           description: Unauthorized
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"

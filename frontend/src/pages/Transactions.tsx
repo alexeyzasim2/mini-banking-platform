@@ -53,6 +53,7 @@ export const Transactions = () => {
               <option value="">All</option>
               <option value="transfer">Transfer</option>
               <option value="exchange">Exchange</option>
+              <option value="initial_deposit">Initial Deposit</option>
             </select>
           </div>
         </div>
@@ -66,7 +67,7 @@ export const Transactions = () => {
             {transactions && transactions.length > 0 ? (
               <>
                 <TransactionList transactions={transactions} />
-                
+
                 <div className="mt-4 flex justify-between items-center">
                   <button
                     onClick={() => setPage(Math.max(1, page - 1))}

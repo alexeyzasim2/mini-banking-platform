@@ -42,12 +42,3 @@ type LedgerEntry struct {
 	AmountCents   int64     `db:"amount_cents" json:"amount_cents"`
 	CreatedAt     time.Time `db:"created_at" json:"created_at"`
 }
-
-type ExchangeSpread struct {
-	ID                   string    `db:"id" json:"id"`
-	TransactionID        string    `db:"transaction_id" json:"transaction_id"`
-	ResidualNumerator    int64     `db:"residual_numerator" json:"residual_numerator"`
-	ResidualDenominator  int64     `db:"residual_denominator" json:"residual_denominator"`
-	TargetCurrency       string    `db:"target_currency" json:"target_currency"`
-	CreatedAt            time.Time `db:"created_at" json:"created_at"`
-}

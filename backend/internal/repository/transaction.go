@@ -77,43 +77,6 @@ func (r *TransactionRepository) CreateLedgerEntryInTx(ctx context.Context, tx *s
 	return r.CreateLedgerEntry(ctx, tx, entry)
 }
 
-func (r *TransactionRepository) CreateExchangeSpread(ctx context.Context, tx *sqlx.Tx, spread *models.ExchangeSpread) error {
-	query := `
-		INSERT INTO exchange_spreads (transaction_id, residual_numerator, residual_denominator, target_currency)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, created_at
-	`
-	
-	r.logger.Info("repository: attempting to create exchange spread",
-		"transactionID", spread.TransactionID,
-		"residualNumerator", spread.ResidualNumerator,
-		"residualDenominator", spread.ResidualDenominator,
-		"targetCurrency", spread.TargetCurrency)
-	
-	err := tx.QueryRowContext(ctx, query, 
-		spread.TransactionID, 
-		spread.ResidualNumerator, 
-		spread.ResidualDenominator, 
-		spread.TargetCurrency,
-	).Scan(&spread.ID, &spread.CreatedAt)
-
-	if err != nil {
-		r.logger.Error("repository: failed to create exchange spread", 
-			"error", err,
-			"transactionID", spread.TransactionID,
-			"residualNumerator", spread.ResidualNumerator,
-			"residualDenominator", spread.ResidualDenominator,
-			"targetCurrency", spread.TargetCurrency)
-		return fmt.Errorf("repository: error creating exchange spread: %w", err)
-	}
-
-	r.logger.Info("repository: exchange spread recorded successfully", 
-		"spreadID", spread.ID, 
-		"transactionID", spread.TransactionID,
-		"residual", fmt.Sprintf("%d/%d %s", spread.ResidualNumerator, spread.ResidualDenominator, spread.TargetCurrency))
-	return nil
-}
-
 func (r *TransactionRepository) FindByUserID(ctx context.Context, userID string, transactionType string, page, limit int) ([]models.Transaction, int, error) {
 	offset := (page - 1) * limit
 
@@ -139,11 +102,11 @@ func (r *TransactionRepository) FindByUserID(ctx context.Context, userID string,
 	}
 
 	baseQuery += " ORDER BY created_at DESC"
-	
+
 	argCount++
 	baseQuery += fmt.Sprintf(" LIMIT $%d", argCount)
 	args = append(args, limit)
-	
+
 	argCount++
 	baseQuery += fmt.Sprintf(" OFFSET $%d", argCount)
 	args = append(args, offset)
@@ -168,7 +131,7 @@ func (r *TransactionRepository) FindByUserID(ctx context.Context, userID string,
 func (r *TransactionRepository) GetLedgerSumCents(ctx context.Context, accountID string) (int64, error) {
 	var sumCents sql.NullInt64
 	query := `SELECT COALESCE(SUM(amount_cents), 0) FROM ledger_entries WHERE account_id = $1`
-	
+
 	err := r.db.GetContext(ctx, &sumCents, query, accountID)
 	if err != nil {
 		r.logger.Error("repository: failed to get ledger sum", "error", err, "accountID", accountID)
@@ -177,24 +140,3 @@ func (r *TransactionRepository) GetLedgerSumCents(ctx context.Context, accountID
 
 	return sumCents.Int64, nil
 }
-
-func (r *TransactionRepository) GetExchangeSpreadsByTransaction(ctx context.Context, transactionID string) (*models.ExchangeSpread, error) {
-	var spread models.ExchangeSpread
-	query := `
-		SELECT id, transaction_id, residual_numerator, residual_denominator, target_currency, created_at
-		FROM exchange_spreads
-		WHERE transaction_id = $1
-	`
-	
-	err := r.db.GetContext(ctx, &spread, query, transactionID)
-	if err == sql.ErrNoRows {
-		return nil, nil 
-	}
-	if err != nil {
-		r.logger.Error("repository: failed to get exchange spread", "error", err, "transactionID", transactionID)
-		return nil, fmt.Errorf("repository: error getting exchange spread: %w", err)
-	}
-
-	return &spread, nil
-}
-

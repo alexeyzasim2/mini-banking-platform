@@ -11,6 +11,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -18,7 +19,6 @@ import (
 )
 
 var testDB *sqlx.DB
-
 
 func setupTestDB(t *testing.T) *sqlx.DB {
 	if testDB != nil {
@@ -39,7 +39,6 @@ func setupTestDB(t *testing.T) *sqlx.DB {
 		t.Fatalf("Failed to connect to test database: %v", err)
 	}
 
-	// Run migrations
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatalf("Failed to set goose dialect: %v", err)
 	}
@@ -60,7 +59,7 @@ func getEnv(key, defaultValue string) string {
 }
 
 func cleanupTestData(t *testing.T, db *sqlx.DB) {
-	tables := []string{"exchange_spreads", "ledger_entries", "transactions", "accounts", "users"}
+	tables := []string{"ledger_entries", "transactions", "accounts", "users"}
 	for _, table := range tables {
 		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s", table))
 		if err != nil {
@@ -101,7 +100,6 @@ func createTestAccount(t *testing.T, db *sqlx.DB, userID, currency string, balan
 		t.Fatalf("Failed to create test account: %v", err)
 	}
 
-	
 	if balanceCents != 0 {
 		txQuery := `INSERT INTO transactions (type, from_user_id, currency, amount_cents, description) 
 		            VALUES ($1, $2, $3, $4, $5) RETURNING id`
@@ -124,20 +122,20 @@ func createTestAccount(t *testing.T, db *sqlx.DB, userID, currency string, balan
 func createFXSystemAccounts(t *testing.T, db *sqlx.DB) {
 	userQuery := `INSERT INTO users (id, email, password, first_name, last_name) VALUES ($1, $2, $3, $4, $5)`
 	_, err := db.Exec(userQuery, models.FXSystemUserID, models.FXSystemUserEmail, "N/A", "FX", "System")
-    if err != nil {
-        t.Fatalf("Failed to create FX system user: %v", err)
-    }
+	if err != nil {
+		t.Fatalf("Failed to create FX system user: %v", err)
+	}
 
-    accountQuery := `INSERT INTO accounts (user_id, currency, balance_cents, allow_negative)
+	accountQuery := `INSERT INTO accounts (user_id, currency, balance_cents, allow_negative)
                      VALUES ($1, $2, $3, $4)`
-    _, err = db.Exec(accountQuery, models.FXSystemUserID, models.CurrencyUSD, 0, true)
-    if err != nil {
-        t.Fatalf("Failed to create FX USD account: %v", err)
-    }
-    _, err = db.Exec(accountQuery, models.FXSystemUserID, models.CurrencyEUR, 0, true)
-    if err != nil {
-        t.Fatalf("Failed to create FX EUR account: %v", err)
-    }
+	_, err = db.Exec(accountQuery, models.FXSystemUserID, models.CurrencyUSD, 0, true)
+	if err != nil {
+		t.Fatalf("Failed to create FX USD account: %v", err)
+	}
+	_, err = db.Exec(accountQuery, models.FXSystemUserID, models.CurrencyEUR, 0, true)
+	if err != nil {
+		t.Fatalf("Failed to create FX EUR account: %v", err)
+	}
 }
 
 func TestTransfer_Success(t *testing.T) {
@@ -318,6 +316,126 @@ func TestConcurrentTransfers(t *testing.T) {
 	}
 }
 
+func TestConcurrentOppositeTransfers_NoDeadlock(t *testing.T) {
+	db := setupTestDB(t)
+	defer cleanupTestData(t, db)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	repos := repository.NewRepositories(db, logger)
+	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
+
+	userA := createTestUser(t, db, "deadlock-a@test.com")
+	userB := createTestUser(t, db, "deadlock-b@test.com")
+	createTestAccount(t, db, userA.ID, "USD", 10000)
+	createTestAccount(t, db, userB.ID, "USD", 10000)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, err := service.Transfer(ctx, userA.ID, dto.TransferRequest{
+			ToUserID:    userB.Email,
+			Currency:    "USD",
+			AmountCents: 1000,
+		})
+		errCh <- err
+	}()
+	go func() {
+		defer wg.Done()
+		_, err := service.Transfer(ctx, userB.ID, dto.TransferRequest{
+			ToUserID:    userA.Email,
+			Currency:    "USD",
+			AmountCents: 1000,
+		})
+		errCh <- err
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("transfers did not complete: %v", ctx.Err())
+	}
+
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("unexpected transfer error: %v", err)
+		}
+	}
+}
+
+func TestConcurrentOppositeExchange_NoDeadlock(t *testing.T) {
+	db := setupTestDB(t)
+	defer cleanupTestData(t, db)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	repos := repository.NewRepositories(db, logger)
+	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
+
+	createFXSystemAccounts(t, db)
+
+	userA := createTestUser(t, db, "deadlock-ex-a@test.com")
+	userB := createTestUser(t, db, "deadlock-ex-b@test.com")
+	createTestAccount(t, db, userA.ID, "USD", 10000)
+	createTestAccount(t, db, userA.ID, "EUR", 10000)
+	createTestAccount(t, db, userB.ID, "USD", 10000)
+	createTestAccount(t, db, userB.ID, "EUR", 10000)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, err := service.Exchange(ctx, userA.ID, dto.ExchangeRequest{
+			FromCurrency: "USD",
+			AmountCents:  1000,
+		})
+		errCh <- err
+	}()
+	go func() {
+		defer wg.Done()
+		_, err := service.Exchange(ctx, userB.ID, dto.ExchangeRequest{
+			FromCurrency: "EUR",
+			AmountCents:  1000,
+		})
+		errCh <- err
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatalf("exchanges did not complete: %v", ctx.Err())
+	}
+
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("unexpected exchange error: %v", err)
+		}
+	}
+}
+
 func TestExchange_Success(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestData(t, db)
@@ -359,11 +477,9 @@ func TestExchange_Success(t *testing.T) {
 		t.Errorf("Expected EUR balance %d, got %d", expectedEUR, balanceEUR)
 	}
 
-	// Verify double-entry bookkeeping: SUM(amount_cents) should equal 0 for the transaction
-	// All amounts should be in the same currency (source currency) for proper balancing
 	var totalSum int64
 	db.Get(&totalSum, "SELECT COALESCE(SUM(amount_cents), 0) FROM ledger_entries WHERE transaction_id = $1", tx.ID)
-	
+
 	if totalSum != 0 {
 		t.Errorf("Expected total sum of ledger entries to be 0 (double-entry), got %d", totalSum)
 	}
@@ -421,8 +537,6 @@ func TestExchange_MinimumAmount(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestData(t, db)
 
-
-
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repos := repository.NewRepositories(db, logger)
 	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
@@ -453,8 +567,6 @@ func TestExchange_IntegerOverflowProtection(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestData(t, db)
 
-	
-
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repos := repository.NewRepositories(db, logger)
 	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
@@ -476,4 +588,3 @@ func TestExchange_IntegerOverflowProtection(t *testing.T) {
 		t.Error("Expected error for amount that would cause overflow")
 	}
 }
-

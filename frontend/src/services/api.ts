@@ -30,10 +30,10 @@ api.interceptors.request.use((config) => {
 export const authApi = {
   login: (data: LoginRequest) =>
     api.post<AuthResponse>('/auth/login', data),
-  
+
   register: (data: RegisterRequest) =>
     api.post<AuthResponse>('/auth/register', data),
-  
+
   getMe: () =>
     api.get<User>('/auth/me'),
 };
@@ -41,18 +41,18 @@ export const authApi = {
 export const accountsApi = {
   getAccounts: () =>
     api.get<{ accounts: Account[] }>('/accounts'),
-  
+
   getBalance: (accountId: string) =>
-    api.get<{ balance: string }>(`/accounts/${accountId}/balance`),
+    api.get<{ balance_cents: number; currency: string }>(`/accounts/${accountId}/balance`),
 };
 
 export const transactionsApi = {
   transfer: (data: TransferRequest) =>
     api.post<Transaction>('/transactions/transfer', data),
-  
+
   exchange: (data: ExchangeRequest) =>
     api.post<Transaction>('/transactions/exchange', data),
-  
+
   getTransactions: (params?: { type?: string; page?: number; limit?: number }) =>
     api.get<{ transactions: Transaction[]; page: number; limit: number; total: number }>('/transactions', { params }),
 };

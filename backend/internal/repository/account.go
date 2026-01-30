@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"mini-banking-platform/internal/errorsx"
 	"mini-banking-platform/internal/models"
+	"sort"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -28,7 +29,7 @@ func (r *AccountRepository) Create(ctx context.Context, account *models.Account)
 	`
 	err := r.db.QueryRowContext(ctx, query, account.UserID, account.Currency, account.BalanceCents).
 		Scan(&account.ID, &account.CreatedAt, &account.UpdatedAt)
-	
+
 	if err != nil {
 		r.logger.Error("repository: failed to create account", "error", err, "userID", account.UserID)
 		return fmt.Errorf("repository: error creating account: %w", err)
@@ -46,7 +47,7 @@ func (r *AccountRepository) CreateInTx(ctx context.Context, tx *sqlx.Tx, account
 	`
 	err := tx.QueryRowContext(ctx, query, account.UserID, account.Currency, account.BalanceCents).
 		Scan(&account.ID, &account.CreatedAt, &account.UpdatedAt)
-	
+
 	if err != nil {
 		r.logger.Error("repository: failed to create account in tx", "error", err, "userID", account.UserID)
 		return fmt.Errorf("repository: error creating account: %w", err)
@@ -143,6 +144,51 @@ func (r *AccountRepository) UpdateBalanceCents(ctx context.Context, tx *sqlx.Tx,
 	return nil
 }
 
+func (r *AccountRepository) LockAccountsForUpdate(ctx context.Context, tx *sqlx.Tx, accountIDs []string) error {
+	if len(accountIDs) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(accountIDs))
+	ids := make([]string, 0, len(accountIDs))
+	for _, id := range accountIDs {
+		if _, exists := unique[id]; exists {
+			continue
+		}
+		unique[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	query, args, err := sqlx.In(`SELECT id FROM accounts WHERE id IN (?) ORDER BY id FOR UPDATE`, ids)
+	if err != nil {
+		return fmt.Errorf("repository: error building lock query: %w", err)
+	}
+	query = tx.Rebind(query)
+
+	rows, err := tx.QueryxContext(ctx, query, args...)
+	if err != nil {
+		r.logger.Error("repository: failed to lock accounts", "error", err)
+		return fmt.Errorf("repository: error locking accounts: %w", err)
+	}
+	defer rows.Close()
+
+	locked := 0
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("repository: error scanning lock result: %w", err)
+		}
+		locked++
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("repository: error reading lock rows: %w", err)
+	}
+	if locked != len(ids) {
+		return errorsx.ErrAccountNotFound
+	}
+	return nil
+}
+
 func (r *AccountRepository) GetBalanceCentsForUpdate(ctx context.Context, tx *sqlx.Tx, accountID string) (int64, error) {
 	var balanceCents int64
 	query := `SELECT balance_cents FROM accounts WHERE id = $1 FOR UPDATE`
@@ -154,6 +200,17 @@ func (r *AccountRepository) GetBalanceCentsForUpdate(ctx context.Context, tx *sq
 	return balanceCents, nil
 }
 
+func (r *AccountRepository) GetBalanceCents(ctx context.Context, tx *sqlx.Tx, accountID string) (int64, error) {
+	var balanceCents int64
+	query := `SELECT balance_cents FROM accounts WHERE id = $1`
+	err := tx.GetContext(ctx, &balanceCents, query, accountID)
+	if err != nil {
+		r.logger.Error("repository: failed to get balance", "error", err, "accountID", accountID)
+		return 0, fmt.Errorf("repository: error getting balance: %w", err)
+	}
+	return balanceCents, nil
+}
+
 func (r *AccountRepository) FindFXAccountByCurrency(ctx context.Context, currency string) (*models.Account, error) {
-    return r.FindByUserAndCurrency(ctx, models.FXSystemUserID, currency)
+	return r.FindByUserAndCurrency(ctx, models.FXSystemUserID, currency)
 }

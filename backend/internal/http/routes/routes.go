@@ -2,10 +2,14 @@ package routes
 
 import (
 	"log/slog"
+	"net/http"
+	"os"
+	"strings"
 
 	"mini-banking-platform/internal/http/handlers"
 	"mini-banking-platform/internal/http/middleware"
 	"mini-banking-platform/internal/jwt"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,14 +17,42 @@ func NewRouter(handler *handlers.Handler, jwtService *jwt.Service, logger *slog.
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 
+	allowOrigin := os.Getenv("CORS_ALLOW_ORIGIN")
+	if allowOrigin == "" {
+		allowOrigin = "http://localhost:3000"
+	}
+	allowOrigins := strings.Split(allowOrigin, ",")
+
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		origin := c.GetHeader("Origin")
+		allowedOrigin := "*"
+		if allowOrigin != "*" && origin != "" {
+			for _, o := range allowOrigins {
+				if strings.TrimSpace(o) == origin {
+					allowedOrigin = origin
+					break
+				}
+			}
+		} else if allowOrigin == "*" {
+			if origin != "" {
+				allowedOrigin = origin
+			} else {
+				allowedOrigin = "*"
+			}
+		}
+		
+
+		c.Writer.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		
+		if allowedOrigin != "*" {
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			c.Writer.Header().Set("Vary", "Origin")
+		}
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
@@ -59,4 +91,3 @@ func NewRouter(handler *handlers.Handler, jwtService *jwt.Service, logger *slog.
 
 	return router
 }
-
