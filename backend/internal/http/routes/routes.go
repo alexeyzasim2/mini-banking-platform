@@ -1,14 +1,15 @@
-package handlers
+package routes
 
 import (
 	"log/slog"
 
+	"mini-banking-platform/internal/http/handlers"
 	"mini-banking-platform/internal/http/middleware"
 	"mini-banking-platform/internal/jwt"
 	"github.com/gin-gonic/gin"
 )
 
-func NewRouter(handler *Handler, jwtService *jwt.Service, logger *slog.Logger) *gin.Engine {
+func NewRouter(handler *handlers.Handler, jwtService *jwt.Service, logger *slog.Logger) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 
@@ -26,9 +27,9 @@ func NewRouter(handler *Handler, jwtService *jwt.Service, logger *slog.Logger) *
 		c.Next()
 	})
 
-	authHandler := NewAuthHandler(handler)
-	accountHandler := NewAccountHandler(handler)
-	transactionHandler := NewTransactionHandler(handler)
+	authHandler := handlers.NewAuthHandler(handler)
+	accountHandler := handlers.NewAccountHandler(handler)
+	transactionHandler := handlers.NewTransactionHandler(handler)
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
@@ -58,3 +59,4 @@ func NewRouter(handler *Handler, jwtService *jwt.Service, logger *slog.Logger) *
 
 	return router
 }
+

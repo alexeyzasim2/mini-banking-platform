@@ -38,7 +38,7 @@ func (s *TransactionService) Transfer(ctx context.Context, fromUserID string, re
 	if amountCents <= 0 {
 		return nil, errorsx.ErrInvalidAmount
 	}
-	if req.Currency != "USD" && req.Currency != "EUR" {
+	if req.Currency != models.CurrencyUSD && req.Currency != models.CurrencyEUR {
 		return nil, errorsx.ErrInvalidCurrency
 	}
 
@@ -87,7 +87,7 @@ func (s *TransactionService) Transfer(ctx context.Context, fromUserID string, re
 	}
 
 	transaction := &models.Transaction{
-		Type:        "transfer",
+		Type:        models.TransactionTypeTransfer,
 		FromUserID:  fromUserID,
 		ToUserID:    &toUser.ID,
 		Currency:    req.Currency,
@@ -102,6 +102,7 @@ func (s *TransactionService) Transfer(ctx context.Context, fromUserID string, re
 	debitEntry := &models.LedgerEntry{
 		TransactionID: transaction.ID,
 		AccountID:     fromAccount.ID,
+		Currency:      req.Currency,
 		AmountCents:   -amountCents,
 	}
 	if err := s.transactionRepo.CreateLedgerEntry(ctx, tx, debitEntry); err != nil {
@@ -111,6 +112,7 @@ func (s *TransactionService) Transfer(ctx context.Context, fromUserID string, re
 	creditEntry := &models.LedgerEntry{
 		TransactionID: transaction.ID,
 		AccountID:     toAccount.ID,
+		Currency:      req.Currency,
 		AmountCents:   amountCents,
 	}
 	if err := s.transactionRepo.CreateLedgerEntry(ctx, tx, creditEntry); err != nil {
@@ -139,22 +141,22 @@ func (s *TransactionService) Exchange(ctx context.Context, userID string, req dt
 		return nil, errorsx.ErrInvalidAmount
 	}
 
-	if fromAmountCents < 10 {
-		return nil, errorsx.BadRequest("minimum exchange amount is 10 cents ($0.10 or €0.10)")
+	if fromAmountCents < models.MinExchangeAmountCents {
+		return nil, errorsx.BadRequest(fmt.Sprintf("minimum exchange amount is %d cents", models.MinExchangeAmountCents))
 	}
 
 	fromCurrency := req.FromCurrency
 	var toCurrency string
 	var rateNum, rateDenom int64
 
-	if fromCurrency == "USD" {
-		toCurrency = "EUR"
-		rateNum = 23
-		rateDenom = 25
-	} else if fromCurrency == "EUR" {
-		toCurrency = "USD"
-		rateNum = 25
-		rateDenom = 23
+	if fromCurrency == models.CurrencyUSD {
+		toCurrency = models.CurrencyEUR
+		rateNum = models.ExchangeRateUSDtoEURNum
+		rateDenom = models.ExchangeRateUSDtoEURDenom
+	} else if fromCurrency == models.CurrencyEUR {
+		toCurrency = models.CurrencyUSD
+		rateNum = models.ExchangeRateEURtoUSDNum
+		rateDenom = models.ExchangeRateEURtoUSDDenom
 	} else {
 		return nil, errorsx.ErrInvalidCurrency
 	}
@@ -172,14 +174,14 @@ func (s *TransactionService) Exchange(ctx context.Context, userID string, req dt
 
 	toAmountCents := (fromAmountCents * rateNum) / rateDenom
 	
-	residualInSourceCurrency := (fromAmountCents * rateNum) % rateDenom
-	if residualInSourceCurrency > 0 {
-		s.logger.Debug("exchange residual captured as spread", 
+	residualNumerator := (fromAmountCents * rateNum) % rateDenom
+	if residualNumerator > 0 {
+		s.logger.Debug("exchange residual will be captured as spread", 
 			"fromAmount", fromAmountCents, 
 			"fromCurrency", fromCurrency,
 			"toAmount", toAmountCents,
 			"toCurrency", toCurrency,
-			"residualFraction", fmt.Sprintf("%d/%d %s", residualInSourceCurrency, rateDenom, toCurrency))
+			"residualFraction", fmt.Sprintf("%d/%d %s", residualNumerator, rateDenom, toCurrency))
 	}
 
 	tx, err := s.transactionRepo.BeginTx(ctx)
@@ -212,7 +214,7 @@ func (s *TransactionService) Exchange(ctx context.Context, userID string, req dt
 	}
 
 	transaction := &models.Transaction{
-		Type:        "exchange",
+		Type:        models.TransactionTypeExchange,
 		FromUserID:  userID,
 		Currency:    fromCurrency,
 		AmountCents: fromAmountCents,
@@ -226,6 +228,7 @@ func (s *TransactionService) Exchange(ctx context.Context, userID string, req dt
 	debitEntry := &models.LedgerEntry{
 		TransactionID: transaction.ID,
 		AccountID:     fromAccount.ID,
+		Currency:      fromCurrency,
 		AmountCents:   -fromAmountCents,
 	}
 	if err := s.transactionRepo.CreateLedgerEntry(ctx, tx, debitEntry); err != nil {
@@ -235,10 +238,42 @@ func (s *TransactionService) Exchange(ctx context.Context, userID string, req dt
 	creditEntry := &models.LedgerEntry{
 		TransactionID: transaction.ID,
 		AccountID:     toAccount.ID,
+		Currency:      toCurrency,
 		AmountCents:   toAmountCents,
 	}
 	if err := s.transactionRepo.CreateLedgerEntry(ctx, tx, creditEntry); err != nil {
 		return nil, err
+	}
+
+	if residualNumerator > 0 {
+		spread := &models.ExchangeSpread{
+			TransactionID:       transaction.ID,
+			ResidualNumerator:   residualNumerator,
+			ResidualDenominator: rateDenom,
+			TargetCurrency:      toCurrency,
+		}
+		s.logger.Info("creating exchange spread",
+			"transactionID", transaction.ID,
+			"residualNumerator", residualNumerator,
+			"residualDenominator", rateDenom,
+			"targetCurrency", toCurrency)
+		if err := s.transactionRepo.CreateExchangeSpread(ctx, tx, spread); err != nil {
+			s.logger.Error("failed to create exchange spread",
+				"error", err,
+				"transactionID", transaction.ID,
+				"targetCurrency", toCurrency)
+			return nil, err
+		}
+		s.logger.Info("exchange spread created successfully",
+			"spreadID", spread.ID,
+			"transactionID", transaction.ID,
+			"targetCurrency", toCurrency)
+	} else {
+		s.logger.Debug("no residual, skipping spread creation",
+			"transactionID", transaction.ID,
+			"fromAmountCents", fromAmountCents,
+			"rateNum", rateNum,
+			"rateDenom", rateDenom)
 	}
 
 	if err := s.accountRepo.UpdateBalanceCents(ctx, tx, fromAccount.ID, -fromAmountCents); err != nil {

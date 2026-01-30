@@ -18,7 +18,7 @@ export const Transactions = () => {
         params.type = filter;
       }
       const res = await transactionsApi.getTransactions(params);
-      setTransactions(res.data.transactions);
+      setTransactions(res.data.transactions || []);
     } catch (error) {
       console.error('Failed to load transactions', error);
     } finally {
@@ -63,25 +63,38 @@ export const Transactions = () => {
           </div>
         ) : (
           <>
-            <TransactionList transactions={transactions} />
-            
-            <div className="mt-4 flex justify-between items-center">
-              <button
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-600">Page {page}</span>
-              <button
-                onClick={() => setPage(page + 1)}
-                disabled={transactions.length < limit}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                Next
-              </button>
-            </div>
+            {transactions && transactions.length > 0 ? (
+              <>
+                <TransactionList transactions={transactions} />
+                
+                <div className="mt-4 flex justify-between items-center">
+                  <button
+                    onClick={() => setPage(Math.max(1, page - 1))}
+                    disabled={page === 1}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">Page {page}</span>
+                  <button
+                    onClick={() => setPage(page + 1)}
+                    disabled={!transactions || transactions.length < limit}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-lg">No transactions found</p>
+                {filter && (
+                  <p className="text-gray-400 text-sm mt-2">
+                    Try changing the filter or check back later
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

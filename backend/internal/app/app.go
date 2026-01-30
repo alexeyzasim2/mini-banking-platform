@@ -12,6 +12,7 @@ import (
 	"mini-banking-platform/internal/config"
 	"mini-banking-platform/internal/http/dto"
 	"mini-banking-platform/internal/http/handlers"
+	"mini-banking-platform/internal/http/routes"
 	"mini-banking-platform/internal/jwt"
 	"mini-banking-platform/internal/repository"
 	"mini-banking-platform/internal/service"
@@ -59,7 +60,7 @@ func NewApp() (*App, error) {
 	}
 
 	handler := handlers.NewHandler(authService, accountService, transactionService, cfg, jwtService, log)
-	router := handlers.NewRouter(handler, jwtService, log)
+	router := routes.NewRouter(handler, jwtService, log)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),

@@ -1,8 +1,10 @@
 -- +goose Up
 -- +goose StatementBegin
+CREATE TYPE transaction_type AS ENUM ('transfer', 'exchange', 'initial_deposit');
+
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type VARCHAR(20) NOT NULL CHECK (type IN ('transfer', 'exchange', 'initial_deposit')),
+    type transaction_type NOT NULL,
     from_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     to_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     currency VARCHAR(3) NOT NULL,
@@ -20,5 +22,6 @@ CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_a
 -- +goose Down
 -- +goose StatementBegin
 DROP TABLE IF EXISTS transactions CASCADE;
+DROP TYPE IF EXISTS transaction_type;
 -- +goose StatementEnd
 

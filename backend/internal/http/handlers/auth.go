@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"mini-banking-platform/internal/http/dto"
+	"mini-banking-platform/internal/http/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,17 +21,17 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondWithBindError(c, err)
+		response.WithBindError(c, err)
 		return
 	}
 
-	response, err := h.handler.authService.Register(ctx, req, h.handler.config.InitialBalanceUSDCents, h.handler.config.InitialBalanceEURCents)
+	resp, err := h.handler.authService.Register(ctx, req, h.handler.config.InitialBalanceUSDCents, h.handler.config.InitialBalanceEURCents)
 	if err != nil {
-		respondWithServiceError(c, err)
+		response.WithServiceError(c, err)
 		return
 	}
 
-	respondWithJSON(c, http.StatusCreated, response)
+	response.WithJSON(c, http.StatusCreated, resp)
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -38,39 +39,39 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondWithBindError(c, err)
+		response.WithBindError(c, err)
 		return
 	}
 
-	response, err := h.handler.authService.Login(ctx, req)
+	resp, err := h.handler.authService.Login(ctx, req)
 	if err != nil {
-		respondWithServiceError(c, err)
+		response.WithServiceError(c, err)
 		return
 	}
 
-	respondWithJSON(c, http.StatusOK, response)
+	response.WithJSON(c, http.StatusOK, resp)
 }
 
 func (h *AuthHandler) GetMe(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		respondWithError(c, "user not authenticated", http.StatusUnauthorized)
+		response.WithError(c, "user not authenticated", http.StatusUnauthorized)
 		return
 	}
 
 	userIDStr, ok := userID.(string)
 	if !ok {
-		respondWithError(c, "invalid user ID", http.StatusInternalServerError)
+		response.WithError(c, "invalid user ID", http.StatusInternalServerError)
 		return
 	}
 
 	ctx := c.Request.Context()
 	user, err := h.handler.authService.GetUser(ctx, userIDStr)
 	if err != nil {
-		respondWithServiceError(c, err)
+		response.WithServiceError(c, err)
 		return
 	}
 
-	respondWithJSON(c, http.StatusOK, user)
+	response.WithJSON(c, http.StatusOK, user)
 }
 

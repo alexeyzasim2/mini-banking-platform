@@ -77,7 +77,7 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest, ini
 
 	usdAccount := &models.Account{
 		UserID:       user.ID,
-		Currency:     "USD",
+		Currency:     models.CurrencyUSD,
 		BalanceCents: initialBalanceUSDCents,
 	}
 	if err := s.accountRepo.CreateInTx(ctx, tx, usdAccount); err != nil {
@@ -87,7 +87,7 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest, ini
 
 	eurAccount := &models.Account{
 		UserID:       user.ID,
-		Currency:     "EUR",
+		Currency:     models.CurrencyEUR,
 		BalanceCents: initialBalanceEURCents,
 	}
 	if err := s.accountRepo.CreateInTx(ctx, tx, eurAccount); err != nil {
@@ -97,9 +97,9 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest, ini
 
 	if initialBalanceUSDCents > 0 {
 		usdTransaction := &models.Transaction{
-			Type:        "initial_deposit",
+			Type:        models.TransactionTypeInitialDeposit,
 			FromUserID:  user.ID,
-			Currency:    "USD",
+			Currency:    models.CurrencyUSD,
 			AmountCents: initialBalanceUSDCents,
 			Description: "Initial deposit",
 		}
@@ -111,6 +111,7 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest, ini
 		usdLedgerEntry := &models.LedgerEntry{
 			TransactionID: usdTransaction.ID,
 			AccountID:     usdAccount.ID,
+			Currency:      models.CurrencyUSD,
 			AmountCents:   initialBalanceUSDCents,
 		}
 		if err := s.transactionRepo.CreateLedgerEntryInTx(ctx, tx, usdLedgerEntry); err != nil {
@@ -121,9 +122,9 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest, ini
 
 	if initialBalanceEURCents > 0 {
 		eurTransaction := &models.Transaction{
-			Type:        "initial_deposit",
+			Type:        models.TransactionTypeInitialDeposit,
 			FromUserID:  user.ID,
-			Currency:    "EUR",
+			Currency:    models.CurrencyEUR,
 			AmountCents: initialBalanceEURCents,
 			Description: "Initial deposit",
 		}
@@ -135,6 +136,7 @@ func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest, ini
 		eurLedgerEntry := &models.LedgerEntry{
 			TransactionID: eurTransaction.ID,
 			AccountID:     eurAccount.ID,
+			Currency:      models.CurrencyEUR,
 			AmountCents:   initialBalanceEURCents,
 		}
 		if err := s.transactionRepo.CreateLedgerEntryInTx(ctx, tx, eurLedgerEntry); err != nil {

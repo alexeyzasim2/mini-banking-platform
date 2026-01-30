@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"mini-banking-platform/internal/http/dto"
+	"mini-banking-platform/internal/http/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,77 +19,77 @@ func NewTransactionHandler(h *Handler) *TransactionHandler {
 func (h *TransactionHandler) Transfer(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		respondWithError(c, "user not authenticated", http.StatusUnauthorized)
+		response.WithError(c, "user not authenticated", http.StatusUnauthorized)
 		return
 	}
 
 	userIDStr, ok := userID.(string)
 	if !ok {
-		respondWithError(c, "invalid user ID", http.StatusInternalServerError)
+		response.WithError(c, "invalid user ID", http.StatusInternalServerError)
 		return
 	}
 
 	var req dto.TransferRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondWithBindError(c, err)
+		response.WithBindError(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
 	transaction, err := h.handler.transactionService.Transfer(ctx, userIDStr, req)
 	if err != nil {
-		respondWithServiceError(c, err)
+		response.WithServiceError(c, err)
 		return
 	}
 
-	respondWithJSON(c, http.StatusCreated, transaction)
+	response.WithJSON(c, http.StatusCreated, transaction)
 }
 
 func (h *TransactionHandler) Exchange(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		respondWithError(c, "user not authenticated", http.StatusUnauthorized)
+		response.WithError(c, "user not authenticated", http.StatusUnauthorized)
 		return
 	}
 
 	userIDStr, ok := userID.(string)
 	if !ok {
-		respondWithError(c, "invalid user ID", http.StatusInternalServerError)
+		response.WithError(c, "invalid user ID", http.StatusInternalServerError)
 		return
 	}
 
 	var req dto.ExchangeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		respondWithBindError(c, err)
+		response.WithBindError(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
 	transaction, err := h.handler.transactionService.Exchange(ctx, userIDStr, req)
 	if err != nil {
-		respondWithServiceError(c, err)
+		response.WithServiceError(c, err)
 		return
 	}
 
-	respondWithJSON(c, http.StatusCreated, transaction)
+	response.WithJSON(c, http.StatusCreated, transaction)
 }
 
 func (h *TransactionHandler) GetTransactions(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		respondWithError(c, "user not authenticated", http.StatusUnauthorized)
+		response.WithError(c, "user not authenticated", http.StatusUnauthorized)
 		return
 	}
 
 	userIDStr, ok := userID.(string)
 	if !ok {
-		respondWithError(c, "invalid user ID", http.StatusInternalServerError)
+		response.WithError(c, "invalid user ID", http.StatusInternalServerError)
 		return
 	}
 
 	var req dto.GetTransactionsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		respondWithBindError(c, err)
+		response.WithBindError(c, err)
 		return
 	}
 
@@ -108,11 +109,11 @@ func (h *TransactionHandler) GetTransactions(c *gin.Context) {
 	ctx := c.Request.Context()
 	transactions, total, err := h.handler.transactionService.GetTransactions(ctx, userIDStr, req.Type, page, limit)
 	if err != nil {
-		respondWithServiceError(c, err)
+		response.WithServiceError(c, err)
 		return
 	}
 
-	respondWithJSON(c, http.StatusOK, gin.H{
+	response.WithJSON(c, http.StatusOK, gin.H{
 		"transactions": transactions,
 		"page":         page,
 		"limit":        limit,

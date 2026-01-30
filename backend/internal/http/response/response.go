@@ -1,4 +1,4 @@
-package handlers
+package response
 
 import (
 	"encoding/json"
@@ -13,15 +13,15 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func respondWithError(c *gin.Context, message string, statusCode int) {
+func WithError(c *gin.Context, message string, statusCode int) {
 	c.JSON(statusCode, gin.H{"error": message})
 }
 
-func respondWithJSON(c *gin.Context, statusCode int, payload interface{}) {
+func WithJSON(c *gin.Context, statusCode int, payload interface{}) {
 	c.JSON(statusCode, payload)
 }
 
-func respondWithServiceError(c *gin.Context, err error) {
+func WithServiceError(c *gin.Context, err error) {
 	var pub *errorsx.PublicError
 	if errors.As(err, &pub) && pub != nil {
 		slog.Default().Warn(
@@ -31,7 +31,7 @@ func respondWithServiceError(c *gin.Context, err error) {
 			"error", err,
 			"cause", errorsx.RootCause(err),
 		)
-		respondWithError(c, pub.Message, pub.Status)
+		WithError(c, pub.Message, pub.Status)
 		return
 	}
 
@@ -71,35 +71,35 @@ func respondWithServiceError(c *gin.Context, err error) {
 
 	switch {
 	case errors.Is(cause, errorsx.ErrUserExists):
-		respondWithError(c, errorsx.ErrUserExists.Error(), http.StatusConflict)
+		WithError(c, errorsx.ErrUserExists.Error(), http.StatusConflict)
 	case errors.Is(cause, errorsx.ErrInvalidCredentials):
-		respondWithError(c, errorsx.ErrInvalidCredentials.Error(), http.StatusUnauthorized)
+		WithError(c, errorsx.ErrInvalidCredentials.Error(), http.StatusUnauthorized)
 	case errors.Is(cause, errorsx.ErrInvalidToken):
-		respondWithError(c, errorsx.ErrInvalidToken.Error(), http.StatusUnauthorized)
+		WithError(c, errorsx.ErrInvalidToken.Error(), http.StatusUnauthorized)
 	case errors.Is(cause, errorsx.ErrUnauthorized):
-		respondWithError(c, errorsx.ErrUnauthorized.Error(), http.StatusForbidden)
+		WithError(c, errorsx.ErrUnauthorized.Error(), http.StatusForbidden)
 	case errors.Is(cause, errorsx.ErrAccountNotFound):
-		respondWithError(c, errorsx.ErrAccountNotFound.Error(), http.StatusNotFound)
+		WithError(c, errorsx.ErrAccountNotFound.Error(), http.StatusNotFound)
 	case errors.Is(cause, errorsx.ErrTransactionNotFound):
-		respondWithError(c, errorsx.ErrTransactionNotFound.Error(), http.StatusNotFound)
+		WithError(c, errorsx.ErrTransactionNotFound.Error(), http.StatusNotFound)
 	case errors.Is(cause, errorsx.ErrUserNotFound):
 		if c.FullPath() == "/transactions/transfer" {
-			respondWithError(c, "recipient not found", http.StatusBadRequest)
+			WithError(c, "recipient not found", http.StatusBadRequest)
 			return
 		}
-		respondWithError(c, errorsx.ErrUserNotFound.Error(), http.StatusNotFound)
+		WithError(c, errorsx.ErrUserNotFound.Error(), http.StatusNotFound)
 	case errors.Is(cause, errorsx.ErrInsufficientFunds):
-		respondWithError(c, errorsx.ErrInsufficientFunds.Error(), http.StatusBadRequest)
+		WithError(c, errorsx.ErrInsufficientFunds.Error(), http.StatusBadRequest)
 	case errors.Is(cause, errorsx.ErrInvalidAmount):
-		respondWithError(c, errorsx.ErrInvalidAmount.Error(), http.StatusBadRequest)
+		WithError(c, errorsx.ErrInvalidAmount.Error(), http.StatusBadRequest)
 	case errors.Is(cause, errorsx.ErrInvalidCurrency):
-		respondWithError(c, errorsx.ErrInvalidCurrency.Error(), http.StatusBadRequest)
+		WithError(c, errorsx.ErrInvalidCurrency.Error(), http.StatusBadRequest)
 	case errors.Is(cause, errorsx.ErrCurrenciesMustDiffer):
-		respondWithError(c, errorsx.ErrCurrenciesMustDiffer.Error(), http.StatusBadRequest)
+		WithError(c, errorsx.ErrCurrenciesMustDiffer.Error(), http.StatusBadRequest)
 	case errors.Is(cause, errorsx.ErrCannotTransferToSelf):
-		respondWithError(c, errorsx.ErrCannotTransferToSelf.Error(), http.StatusBadRequest)
+		WithError(c, errorsx.ErrCannotTransferToSelf.Error(), http.StatusBadRequest)
 	default:
-		respondWithError(c, "internal_error", http.StatusInternalServerError)
+		WithError(c, "internal_error", http.StatusInternalServerError)
 	}
 }
 
@@ -108,31 +108,31 @@ type validationFieldError struct {
 	Message string `json:"message"`
 }
 
-func respondWithBindError(c *gin.Context, err error) {
+func WithBindError(c *gin.Context, err error) {
 	if err == nil {
-		respondWithError(c, "invalid request", http.StatusBadRequest)
+		WithError(c, "invalid request", http.StatusBadRequest)
 		return
 	}
 
 	if errors.Is(err, io.EOF) {
-		respondWithError(c, "request body is required", http.StatusBadRequest)
+		WithError(c, "request body is required", http.StatusBadRequest)
 		return
 	}
 
 	var syntaxErr *json.SyntaxError
 	if errors.As(err, &syntaxErr) {
-		respondWithError(c, "invalid json", http.StatusBadRequest)
+		WithError(c, "invalid json", http.StatusBadRequest)
 		return
 	}
 	msg := strings.ToLower(err.Error())
 	if strings.Contains(msg, "invalid character") || strings.Contains(msg, "unexpected eof") || strings.Contains(msg, "unexpected end of json") {
-		respondWithError(c, "invalid json", http.StatusBadRequest)
+		WithError(c, "invalid json", http.StatusBadRequest)
 		return
 	}
 
 	var typeErr *json.UnmarshalTypeError
 	if errors.As(err, &typeErr) {
-		respondWithError(c, "invalid field type: "+toSnakeCase(typeErr.Field), http.StatusBadRequest)
+		WithError(c, "invalid field type: "+toSnakeCase(typeErr.Field), http.StatusBadRequest)
 		return
 	}
 
@@ -150,7 +150,7 @@ func respondWithBindError(c *gin.Context, err error) {
 		return
 	}
 
-	respondWithError(c, "invalid request body", http.StatusBadRequest)
+	WithError(c, "invalid request body", http.StatusBadRequest)
 }
 
 func validationMessage(fe validator.FieldError) string {
