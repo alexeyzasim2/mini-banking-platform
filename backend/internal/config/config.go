@@ -17,6 +17,8 @@ type Config struct {
 	JWTSecret  string
 	Port       string
 
+	JWTExpiryHours int
+
 	InitialBalanceUSDCents int64
 	InitialBalanceEURCents int64
 
@@ -36,6 +38,8 @@ func Load() (*Config, error) {
 		DBName:     getEnv("DB_NAME", "banking_platform"),
 		JWTSecret:  getEnvRequired("JWT_SECRET"),
 		Port:       getEnv("SERVER_PORT", "8080"),
+
+		JWTExpiryHours: getEnvInt("JWT_EXPIRY_HOURS", 168),
 
 		InitialBalanceUSDCents: getEnvInt64("INITIAL_BALANCE_USD_CENTS", 100000),
 		InitialBalanceEURCents: getEnvInt64("INITIAL_BALANCE_EUR_CENTS", 50000),

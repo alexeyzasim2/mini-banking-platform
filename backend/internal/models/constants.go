@@ -24,3 +24,8 @@ const (
 	MinExchangeAmountCents int64 = 10
 )
 
+const(
+	FXSystemUserID = "00000000-0000-0000-0000-000000000001"
+	FXSystemUserEmail = "fx@system.local"
+)
+

@@ -6,6 +6,18 @@ This document records the use of AI/LLM tools during the development of this pro
 
 AI tools were used for frontend components, unit tests, and API documentation. The backend business logic was implemented manually without AI assistance to ensure deep understanding of financial integrity requirements.
 
+## General constraints applied
+
+Across all AI-assisted tasks, responses were evaluated against the project’s non-negotiables:
+
+- **Financial correctness:** double-entry, zero-sum, and balance integrity.
+- **Concurrency safety:** explicit transaction boundaries and row-level locking.
+- **Input hygiene:** strict validation and predictable error surfaces.
+- **Security posture:** token expiry, storage expectations, and misuse considerations.
+- **API contract:** response shape, pagination, and compatibility with existing clients.
+- **Testing:** edge cases and regression coverage for critical flows.
+- **Observability:** minimal, structured logging around financial actions.
+
 ---
 
 ## AI-1: Initial React Project Structure
@@ -28,7 +40,7 @@ Provide the necessary configuration files (package.json, tailwind.config.js, pos
 ```
 
 **How the response was used:**
-Used configuration files as starting point. Modified package.json to include specific versions (React 19.2.3). Adapted Tailwind config to project needs. The folder structure was used as-is.
+Reviewed for version alignment and minimal setup. Adjusted package.json to pin React 19.2.3, tweaked Tailwind config for project needs, and kept the base folder layout.
 
 ---
 
@@ -61,7 +73,7 @@ Don't include the API service implementation, just the auth context/hook.
 ```
 
 **How the response was used:**
-Used the structure as-is with minor modifications to error handling. Added try-catch blocks for better error management. The localStorage pattern and initial token validation logic were adopted directly.
+Adopted the overall structure after reviewing token lifecycle and API contract. Added guarded error handling and kept the localStorage validation flow with stricter failure behavior.
 
 ---
 
@@ -84,7 +96,7 @@ Component should use TypeScript and accept children as prop.
 ```
 
 **How the response was used:**
-Integrated directly into App.tsx. The loading state pattern was particularly useful. No significant modifications needed.
+Integrated after validating redirect semantics and loading behavior. Kept the loading gate pattern with minimal changes.
 
 ---
 
@@ -122,7 +134,7 @@ Use proper loading states and error handling.
 ```
 
 **How the response was used:**
-Used the layout structure and grid configuration. Modified to include actual form components (TransferForm, ExchangeForm) instead of placeholders. The loading state pattern was adopted. Changed data fetching to use Promise.all for concurrent requests.
+Adopted the layout and grid structure, replaced placeholders with real forms, and aligned loading/error handling to the API. Switched data loading to Promise.all for consistency and latency reduction.
 
 ---
 
@@ -155,7 +167,7 @@ Add proper validation (required fields, minimum amount).
 ```
 
 **How the response was used:**
-Used as base implementation. Added confirmation modal before submission (not in original prompt). Modified recipient field to accept both email and user ID. Added helper text showing available test users.
+Used as a base and extended with confirmation flow, mixed recipient identifier support (email/ID), and clearer user guidance. Validation remained explicit and aligned to backend constraints.
 
 ---
 
@@ -594,4 +606,3 @@ Breakdown by category:
 - Frontend components: 10 interactions (AI-1 through AI-10)
 - Unit tests: 5 interactions (AI-11 through AI-15)
 - Documentation: 2 interactions (AI-15, AI-16)
-

@@ -154,3 +154,6 @@ func (r *AccountRepository) GetBalanceCentsForUpdate(ctx context.Context, tx *sq
 	return balanceCents, nil
 }
 
+func (r *AccountRepository) FindFXAccountByCurrency(ctx context.Context, currency string) (*models.Account, error) {
+    return r.FindByUserAndCurrency(ctx, models.FXSystemUserID, currency)
+}

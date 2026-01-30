@@ -83,7 +83,7 @@ func WithServiceError(c *gin.Context, err error) {
 	case errors.Is(cause, errorsx.ErrTransactionNotFound):
 		WithError(c, errorsx.ErrTransactionNotFound.Error(), http.StatusNotFound)
 	case errors.Is(cause, errorsx.ErrUserNotFound):
-		if c.FullPath() == "/transactions/transfer" {
+		if c.FullPath() == "/api/v1/transactions/transfer" {
 			WithError(c, "recipient not found", http.StatusBadRequest)
 			return
 		}

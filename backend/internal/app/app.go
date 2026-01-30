@@ -47,7 +47,7 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	jwtService := jwt.NewService(cfg.JWTSecret, 168)
+	jwtService := jwt.NewService(cfg.JWTSecret, cfg.JWTExpiryHours)
 
 	repos := repository.NewRepositories(db, log)
 	authService := service.NewAuthService(repos.User, repos.Account, repos.Transaction, jwtService, log)

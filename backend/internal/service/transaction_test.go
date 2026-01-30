@@ -14,6 +14,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/pressly/goose/v3"
 )
 
 var testDB *sqlx.DB
@@ -28,7 +29,7 @@ func setupTestDB(t *testing.T) *sqlx.DB {
 	dbPort := getEnv("DB_PORT", "5432")
 	dbUser := getEnv("DB_USER", "postgres")
 	dbPassword := getEnv("DB_PASSWORD", "Kd8mPq2Ln5Rv9Xt3Yw7Bz")
-	dbName := "banking_platform_test"
+	dbName := getEnv("DB_NAME", "banking_platform_test")
 
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		dbUser, dbPassword, dbHost, dbPort, dbName)
@@ -36,6 +37,15 @@ func setupTestDB(t *testing.T) *sqlx.DB {
 	db, err := sqlx.Connect("postgres", connStr)
 	if err != nil {
 		t.Fatalf("Failed to connect to test database: %v", err)
+	}
+
+	// Run migrations
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatalf("Failed to set goose dialect: %v", err)
+	}
+
+	if err := goose.Up(db.DB, "../../migrations"); err != nil {
+		t.Fatalf("Failed to run migrations: %v", err)
 	}
 
 	testDB = db
@@ -50,7 +60,7 @@ func getEnv(key, defaultValue string) string {
 }
 
 func cleanupTestData(t *testing.T, db *sqlx.DB) {
-	tables := []string{"ledger_entries", "transactions", "accounts", "users"}
+	tables := []string{"exchange_spreads", "ledger_entries", "transactions", "accounts", "users"}
 	for _, table := range tables {
 		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s", table))
 		if err != nil {
@@ -101,14 +111,33 @@ func createTestAccount(t *testing.T, db *sqlx.DB, userID, currency string, balan
 			t.Fatalf("Failed to create initial transaction: %v", err)
 		}
 
-		ledgerQuery := `INSERT INTO ledger_entries (transaction_id, account_id, amount_cents) VALUES ($1, $2, $3)`
-		_, err = db.Exec(ledgerQuery, txID, account.ID, balanceCents)
+		ledgerQuery := `INSERT INTO ledger_entries (transaction_id, account_id, currency, amount_cents) VALUES ($1, $2, $3, $4)`
+		_, err = db.Exec(ledgerQuery, txID, account.ID, currency, balanceCents)
 		if err != nil {
 			t.Fatalf("Failed to create initial ledger entry: %v", err)
 		}
 	}
 
 	return account
+}
+
+func createFXSystemAccounts(t *testing.T, db *sqlx.DB) {
+	userQuery := `INSERT INTO users (id, email, password, first_name, last_name) VALUES ($1, $2, $3, $4, $5)`
+	_, err := db.Exec(userQuery, models.FXSystemUserID, models.FXSystemUserEmail, "N/A", "FX", "System")
+    if err != nil {
+        t.Fatalf("Failed to create FX system user: %v", err)
+    }
+
+    accountQuery := `INSERT INTO accounts (user_id, currency, balance_cents, allow_negative)
+                     VALUES ($1, $2, $3, $4)`
+    _, err = db.Exec(accountQuery, models.FXSystemUserID, models.CurrencyUSD, 0, true)
+    if err != nil {
+        t.Fatalf("Failed to create FX USD account: %v", err)
+    }
+    _, err = db.Exec(accountQuery, models.FXSystemUserID, models.CurrencyEUR, 0, true)
+    if err != nil {
+        t.Fatalf("Failed to create FX EUR account: %v", err)
+    }
 }
 
 func TestTransfer_Success(t *testing.T) {
@@ -297,6 +326,8 @@ func TestExchange_Success(t *testing.T) {
 	repos := repository.NewRepositories(db, logger)
 	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
 
+	createFXSystemAccounts(t, db)
+
 	user := createTestUser(t, db, "user@test.com")
 	createTestAccount(t, db, user.ID, "USD", 10000)
 	createTestAccount(t, db, user.ID, "EUR", 0)
@@ -327,6 +358,15 @@ func TestExchange_Success(t *testing.T) {
 	if balanceEUR != expectedEUR {
 		t.Errorf("Expected EUR balance %d, got %d", expectedEUR, balanceEUR)
 	}
+
+	// Verify double-entry bookkeeping: SUM(amount_cents) should equal 0 for the transaction
+	// All amounts should be in the same currency (source currency) for proper balancing
+	var totalSum int64
+	db.Get(&totalSum, "SELECT COALESCE(SUM(amount_cents), 0) FROM ledger_entries WHERE transaction_id = $1", tx.ID)
+	
+	if totalSum != 0 {
+		t.Errorf("Expected total sum of ledger entries to be 0 (double-entry), got %d", totalSum)
+	}
 }
 
 func TestExchange_NoMoneyMinting(t *testing.T) {
@@ -336,6 +376,8 @@ func TestExchange_NoMoneyMinting(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repos := repository.NewRepositories(db, logger)
 	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
+
+	createFXSystemAccounts(t, db)
 
 	user := createTestUser(t, db, "user@test.com")
 	createTestAccount(t, db, user.ID, "USD", 10000)
@@ -379,9 +421,13 @@ func TestExchange_MinimumAmount(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestData(t, db)
 
+
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repos := repository.NewRepositories(db, logger)
 	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
+
+	createFXSystemAccounts(t, db)
 
 	user := createTestUser(t, db, "user@test.com")
 	createTestAccount(t, db, user.ID, "USD", 1000)
@@ -407,9 +453,13 @@ func TestExchange_IntegerOverflowProtection(t *testing.T) {
 	db := setupTestDB(t)
 	defer cleanupTestData(t, db)
 
+	
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	repos := repository.NewRepositories(db, logger)
 	service := NewTransactionService(repos.Account, repos.Transaction, repos.User, logger)
+
+	createFXSystemAccounts(t, db)
 
 	user := createTestUser(t, db, "user@test.com")
 	largeAmount := int64(9223372036854775807)
